@@ -32,4 +32,5 @@ class Env(object):
         os_env['CXXFLAGS'] = self.CXXFLAGS
         os_env['LDFLAGS'] = self.LDFLAGS
         os_env['PKG_CONFIG_PATH'] = self.PKG_CONFIG_PATH
+        os_env['PKG_CONFIG_LIBDIR'] = self.PKG_CONFIG_PATH
         return os_env

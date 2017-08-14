@@ -35,7 +35,7 @@ def build(wf, name, no_flicker_patch, patch):
 
         config_writer(wine_src_dir, name or os.path.basename())
         subprocess.run([
-            config.WINESKIN_ENGINE_BUILD
+            config.WINESKIN_ENGINE_BUILD_SCRIPT
         ], check=True)
 
     except:
@@ -45,13 +45,13 @@ def build(wf, name, no_flicker_patch, patch):
 
 
 def config_writer(wine_src_dir, engine_name):
-    config_path = os.path.join(config.WINESKIN_ENGINEBASE, 'config.txt')
+    config_path = os.path.join(config.WINESKIN_ENGINE_BUILDER_DIR, 'config.txt')
     with open(config_path, 'w+') as f:
         f.writelines([
             f'{wine_src_dir}\n',
             f'{engine_name}\n',
             f'{" ".join(config.WINE_BUILD_OPTIONS)}\n',
-            f'{config.ENGINEBASE_VERSION}\n',
+            f'{config.ENGINE_BUILDER_VERSION}\n',
             f'{config.SEVEN_ZA_BIN}\n',
             f'{config.MIN_SDK_VERSION}'
         ])

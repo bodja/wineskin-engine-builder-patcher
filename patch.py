@@ -1,8 +1,12 @@
 import os
+import stat
 from contextlib import contextmanager
 from distutils.dir_util import remove_tree
 
+from shutil import copyfile
+
 import config
+from utils import files
 from installer.environment.env import Env
 from installer.formula.flac import Flac
 from installer.formula.freetype import Freetype
@@ -16,9 +20,9 @@ from installer.formula.libsoxr import Libsoxr
 from installer.formula.libtool import Libtool
 from installer.formula.libvorbis import Libvorbis
 from installer.formula.libxml2 import Libxml2
+from installer.formula.openal_soft import OpenalSoft
 from installer.formula.openssl import Openssl
 from installer.formula.pulseaudio import Pulseaudio
-from utils import files, git_utils
 
 git_patches_dir = os.path.join(config.ROOT_DIR, 'patches')
 
@@ -26,7 +30,7 @@ files_migrations = [
     files.Migration(
         name='libs-update',
         from_dir=config.PREFIX,
-        to_dir=config.WINESKIN_ENGINEBASE,
+        to_dir=config.WINESKIN_ENGINE_BUILDER_DIR,
         remove_files=[
             'include/png.h',
             'include/pngconf.h',
@@ -83,13 +87,6 @@ def move_libs_to_engine_builder(*migration_instances):
         migration.migrate()
 
 
-def apply_patches(*paths):
-    for path in paths:
-        patch = os.path.basename(path)
-        with git_utils.git_backup(config.WINESKIN_ENGINEBASE, patch):
-            git_utils.apply_patch(config.WINESKIN_ENGINEBASE, path)
-
-
 def apply():
     with cleanup(config.PREFIX, config.TMP_DIR):
         install_libs(
@@ -105,15 +102,19 @@ def apply():
             Gettext,
             Libsoxr,
             Libsndfile,
+            OpenalSoft,
             Openssl,
             Pulseaudio,
         )
-        move_libs_to_engine_builder(
-            *files_migrations
+        src_file = os.path.join(
+            config.ROOT_DIR, 'patches', 'engine', 'WineskinEngineBuild'
         )
-        apply_patches(
-            os.path.join(git_patches_dir, 'engine', 'wsenginebuild-fix.diff')
-        )
+        dst_file = os.path.join(config.PREFIX, 'WineskinEngineBuild')
+        copyfile(src_file, dst_file)
+        st = os.stat(dst_file)
+        os.chmod(dst_file, st.st_mode | stat.S_IEXEC)
+
+        move_libs_to_engine_builder(*files_migrations)
 
 
 if __name__ == "__main__":

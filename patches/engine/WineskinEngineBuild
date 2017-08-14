@@ -1,0 +1,336 @@
+#!/bin/bash
+# Wineskin Engine builder script
+# Made to build off new WineskinX11 version in Wineskin 2.5.5
+#
+# Version 2.5.5
+#
+# Builds correctly only from Wineskin Winery 1.3+
+# Copyright by the Wineskin Project, and doh123.com
+# Like all Wineskin Source, this is available to use under the LGPL license.
+# http://www.gnu.org/licenses/lgpl.html
+
+#####################################
+######### start functions ###########
+#####################################
+function CleanUp
+{
+echo "Cleaning up changes made for the build, if any..."
+rm -rf $BEPATH
+if [ "$FIXOPTLOCAL" == "yes" ]
+then
+  echo "fixing Macports install back"
+  echo "Please enter an administrator password if prompted"
+  sudo rm /opt/local
+  if [ $? -ne 0 ]
+  then
+    echo "An error occurred fixing the Macports install"
+    echo "your Macports needs to be manually moved back to /opt/local, it is currently in /opt/localBETemp"
+  else
+    sudo mv "/opt/localBETemp" "/opt/local"
+  fi
+fi
+echo " "
+}
+#####################################
+############ start main #############
+#####################################
+# read config file to get info
+cd "$(dirname "$0")"
+MINMACOSXVERSIONTOBUILDFOR="10.12"
+i=0
+while read LINE
+do
+case $i in
+0)WINESOURCEDIR="$LINE";;
+1)ENGINENAME="$LINE";;
+2)WINECONFIGUREOPTIONS="$LINE";;
+3)ENGINEBASE="$LINE";;
+4)WSW7Z="$LINE";;
+5)MINMACOSXVERSIONTOBUILDFOR="$LINE";;
+esac
+((i++))
+done < "config.txt"
+
+####### Set Variables
+MOVETOFOLDER="$HOME/Library/Application Support/Wineskin/Engines"
+BUILDFOLDER="/tmp/WineskinEngineBuilder/wswine.bundle"
+BEPATH="/tmp/Wineskin"
+CBSTOREPATH="$HOME/Library/Application Support/Wineskin/EngineBase/$ENGINEBASE"
+BEPATHINCLUDES="$BEPATH/include"
+BEPATHLIBS="$BEPATH/lib"
+BEPATHBINS="$BEPATH/bin"
+THEOSVERSION="$(/usr/bin/sw_vers | grep 'ProductVersion:' | grep -o '[0-9]*\.[0-9]*\.[0-9]*')"
+THEOSVERSION="${THEOSVERSION%.*}"
+
+if [ "$MINMACOSXVERSIONTOBUILDFOR" == "10.5" ]
+    then
+        echo "*********************************************************"
+        echo "*********************************************************"
+        echo "Alert, Minimum OSX version changed to OSX 10.6"
+        echo "       cannot build for OSX 10.5 on W2.5.5+ Engine Base"
+        echo "*********************************************************"
+        echo "*********************************************************"
+        MINMACOSXVERSIONTOBUILDFOR="10.6"
+fi
+#make wswine.bundle to place in /tmp
+rm -rf "/tmp/WineskinEngineBuilder"
+mkdir -p "/tmp/WineskinEngineBuilder/wswine.bundle"
+
+######## The engine base folder needs to be symlinked to $BEPATH
+echo "*********************************************************"
+echo "Build environment being set up"
+echo "DO NOT RUN ANY WINESKIN BASED PORTS WHILE THIS IS RUNNING"
+echo "OR IT WILL TOTALLY SCREW THINGS UP!!!!"
+echo "*********************************************************"
+echo " "
+rm -rf "$BEPATH"
+ln -s "$CBSTOREPATH" "$BEPATH"
+
+######## symlink at /opt/local needed... need to temp move /opt/local if macports exists
+if [ -d "/opt/local" ]
+then
+  echo "You have Macports installed to /opt/local.  This will interfere with the Wine build.  It needs to be temporarily moved for this build.  It will be fixed back after the build, so your Macports install will continue to function later. Do NOT try to use Macports while this build is running!"
+    echo "Please enter an administrator password if prompted"
+    sudo mv "/opt/local" "/opt/localBETemp"
+    if [ $? -ne 0 ]; then
+        echo "An error occurred, build halted.";CleanUp;exit
+    fi
+    sudo ln -s "$BEPATH" "/opt/local"
+    FIXOPTLOCAL="yes"
+fi
+
+######## Start building the Wine source
+# set build environment variables so it builds properly.
+export PATH="/tmp/WineskinGCC/bin:$BEPATHBINS:$PATH"
+export PKG_CONFIG_PATH="${BEPATHLIBS}/pkgconfig"
+export PKG_CONFIG_LIBDIR="${PKG_CONFIG_PATH}"
+#export CC="gcc"
+#export CXX="g++"
+export CC="gcc-4.2"
+export CXX="g++-4.2"
+######## WineskinGCC needs to be symlinked for compiler, if I ever get one working...
+#rm -rf "/tmp/WineskinGCC"
+#ln -s "$CBSTOREPATH/WineskinGCC" "/tmp/WineskinGCC"
+
+#need to test to make sure gcc 4.2 works, and if not prompt to do an install of it.
+gcc-4.2 --version > /dev/null 2>&1
+if [ $? -ne 0 ]
+then
+    echo "";echo ""
+    echo "######################################################";echo ""
+    echo "error, gcc 4.2 is missing on your machine!!!"
+    printf "Would you like to install it now? (enter Y or N): "
+    read ANSWER
+    echo ""
+    if [ "$ANSWER" == "Y" -o "$ANSWER" == "y" ];then
+        echo "";echo "Please enter an Admin password if prompted.  gcc 4.2 will be installed system wide to /usr folder";echo ""
+    else
+        echo "";echo "Canceling Wine Build, exiting...";echo ""
+        CleanUp;exit
+    fi
+    #install gcc to proper locations
+    #uncompress the gcc files
+    "$WSW7Z" x "gcc.tar.7z"
+    tar -xf "gcc.tar"
+    rm -rf "gcc.tar"
+    #get list of all files to move
+    cd "gcc"
+    find usr > "/tmp/WineskinEBTempFile56372893.txt"
+    i=0
+    while read LINE
+    do
+        theList[${i}]="$LINE"
+        ((i++))
+    done < "/tmp/WineskinEBTempFile56372893.txt"
+    rm -rf "/tmp/WineskinEBTempFile56372893.txt"
+    theListElements=${#theList[@]}
+    #make all directories before starting file move
+    j=0
+    for ((i=0;i<$theListElements;i++))
+    do
+        if [ -d "${theList[${i}]}" ]
+        then
+            if [ ! -d "/${theList[${i}]}" ]
+            then
+                echo "Creating Folder /${theList[${i}]}"
+                sudo mkdir -p "/${theList[${i}]}"
+            fi
+        else #file, put in new list for later move
+            theNewList[${j}]="${theList[${i}]}"
+            ((j++))
+        fi
+    done
+    #now copy whats left, should only be files
+    theNewListElements=${#theNewList[@]}
+    for ((i=0;i<$theNewListElements;i++))
+    do
+        echo "Installing gcc/${theNewList[${i}]} to /${theNewList[${i}]}"
+        sudo mv -f "${theNewList[${i}]}" "/${theNewList[${i}]}"
+        if [ $? -ne 0 ]
+        then
+            echo "An error occurred during installing gcc 4.2 files! Build Halted!"
+            sudo rm "/usr/bin/gcc-4.2"
+            CleanUp;exit
+        fi
+    done
+    #delete left over gcc folder
+    cd ..
+    rm -rf gcc
+    echo "";echo ""
+    echo "######################################################"
+    echo "######################################################"
+    echo "gcc 4.2 should now be working on your machine"
+    echo "######################################################";
+    echo "######################################################";echo "";echo ""
+fi
+#make sure the SDK exists
+export OSXSDK="/Developer/SDKs/MacOSX${MINMACOSXVERSIONTOBUILDFOR}.sdk"
+if [ ! -d "$OSXSDK" ]
+then
+    echo "$OSXSDK not found!, trying to find something usable..."
+    #test for same version in new Xcode.app location
+    if [ -d "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX${MINMACOSXVERSIONTOBUILDFOR}.sdk" ]
+    then
+        export OSXSDK="/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX${MINMACOSXVERSIONTOBUILDFOR}.sdk"
+    #if not found, use oldest available OS version found
+    #test for 10.6 SDKs
+    elif [ -d "/Developer/SDKs/MacOSX10.6.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.6"
+        export OSXSDK="/Developer/SDKs/MacOSX10.6.sdk"
+    elif [ -d "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.6.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.6"
+        export OSXSDK="/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.6.sdk"
+    #test for 10.7 SDKs
+    elif [ -d "/Developer/SDKs/MacOSX10.7.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.7"
+        export OSXSDK="/Developer/SDKs/MacOSX10.7.sdk"
+    elif [ -d "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.7.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.7"
+        export OSXSDK="/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.7.sdk"
+    #test for 10.8 SDKs
+    elif [ -d "/Developer/SDKs/MacOSX10.8.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.8"
+        export OSXSDK="/Developer/SDKs/MacOSX10.8.sdk"
+    elif [ -d "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.8"
+        export OSXSDK="/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk"
+    #test for 10.9 SDKs
+    elif [ -d "/Developer/SDKs/MacOSX10.9.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.9"
+        export OSXSDK="/Developer/SDKs/MacOSX10.9.sdk"
+    elif [ -d "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.9"
+        export OSXSDK="/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk"
+    else
+        echo "";echo ""
+        echo "ERROR!!! No usable SDKs found on your system... this may not work right!  Please Install Apple Xcode to get SDKs"
+        echo "";echo ""
+    fi
+    echo "SDK selected is $OSXSDK, lets hope it works..."
+fi
+export SDKROOT="$OSXSDK"
+export DYLD_FALLBACK_LIBRARY_PATH="$BEPATHLIBS:$OSXSDK/usr/lib:/tmp/WineskinGCC/lib"
+export OSXVERSIONMIN="$MINMACOSXVERSIONTOBUILDFOR"
+export MACOSX_DEPLOYMENT_TARGET=$MINMACOSXVERSIONTOBUILDFOR
+export CPPFLAGS="-I$BEPATHINCLUDES -I$BEPATHINCLUDES/pulse"
+export CFLAGS="-arch i386 -m32 -O2 ${OSXSDK+-isysroot $OSXSDK} ${OSXVERSIONMIN+-mmacosx-version-min=$OSXVERSIONMIN} ${CPPFLAGS}"
+#export CFLAGS="-m32 -O2 ${OSXSDK+-isysroot $OSXSDK} ${OSXVERSIONMIN+-mmacosx-version-min=$OSXVERSIONMIN} ${CPPFLAGS}"
+export CXXFLAGS="$CFLAGS"
+export LDFLAGS="-L$BEPATHLIBS -L$BEPATHLIBS/pulse-10.99 -L$BEPATHLIBS/pulse-10.99/modules"
+
+# set the Wine install location to inside the new wswine.bundle
+PREFIXFOLDER="$BUILDFOLDER"
+
+#do the Wine configure
+cd "$WINESOURCEDIR"
+if [ "$WINECONFIGUREOPTIONS" != "" ]
+then
+  WINECONFIGUREOPTIONS=" ${WINECONFIGUREOPTIONS}"
+fi
+# next line is to force Wine to try to build quicktime support, not currently needed.
+#export ac_cv_header_QuickTime_ImageCompression_h="yes"
+
+./configure --prefix="$PREFIXFOLDER" --x-includes=$BEPATHINCLUDES/X11 --x-libraries=$BEPATHLIBS ${WINECONFIGUREOPTIONS}
+if [ $? -ne 0 ]
+then
+  echo "An error occurred during Wine Configure, build halted."
+  CleanUp;exit
+fi
+
+# build Wine
+# -j for multiple jobs like -j4 for 4.
+make depend
+jobCount="$(sysctl -n hw.ncpu)"
+echo "${jobCount} CPUs detected"
+((jobCount++))
+make -j${jobCount}
+if [ $? -ne 0 ]
+then
+  echo "An error occurred during Wine Make, build halted."
+  CleanUp;exit
+fi
+# install into place in the bundle
+make install
+if [ $? -ne 0 ]
+then
+  echo "An error occurred during Wine Make Install, build halted."
+  CleanUp;exit
+fi
+########## clean up extra files installed that aren't needed
+cd "$PREFIXFOLDER"
+rm -rf include
+cd "$PREFIXFOLDER/bin"
+rm function_grep.pl
+cd "$PREFIXFOLDER/share"
+rm -rf man
+rm -rf aclocal
+rm -rf applications
+
+######## fix if the build was cxwine source
+#need to rename bin/wineloader to bin/wine
+cd "$PREFIXFOLDER/bin"
+if [ -f wineloader ]
+then
+  mv wineloader wine > /dev/null 2>&1
+  cd "$PREFIXFOLDER/lib/wine"
+  rm wineboot.exe.so # using a working wineboot since CX is sabotaged.
+  cp -RP "$HOME/Library/Application Support/Wineskin/EngineBase/$ENGINEBASE/wineboot.exe.so" "wineboot.exe.so"
+fi
+
+##### do shut down clean up
+CleanUp
+
+#### Stick engine version in "version" file in root of wswine.bundle
+echo "$ENGINENAME" > "/tmp/WineskinEngineBuilder/wswine.bundle/version"
+
+##### move finished bundle to proper Engines folder
+rm -rf "$MOVETOFOLDER/wswine.bundle"
+mv "/tmp/WineskinEngineBuilder/wswine.bundle" "$MOVETOFOLDER"
+if [ $? -ne 0 ]
+then
+  echo "An error occurred moving wswine.bundle from /tmp/WineskinEngineBuilder to $MOVETOFOLDER"
+  exit
+fi
+
+##### compress finished wswine.bundle into ENGINENAME.tar.7z
+cd "$MOVETOFOLDER"
+tar -cf ${ENGINENAME}.tar wswine.bundle
+"$WSW7Z" a -mx9 ${ENGINENAME}.tar.7z ${ENGINENAME}.tar
+rm -rf ${ENGINENAME}.tar
+
+##### get rid of wswine.bundle
+rm -rf wswine.bundle
+
+##### display finish messages
+echo ""
+echo "The build is finished"
+echo "a working Engine should be part of your library and visible to Wineskin.app and Wineskin Winery.app"
+echo ""
