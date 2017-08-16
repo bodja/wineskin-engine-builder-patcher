@@ -1,23 +1,38 @@
 import os
-import subprocess
 import sys
+import subprocess
 from distutils.dir_util import remove_tree
+from urllib.parse import urlparse
 
 import click
 
 import config
 from utils.archiver import extract
+from utils.downloader import download
 from utils.git_utils import apply_patch
 
 
-@click.command()
-@click.argument('wf', type=click.Path(exists=True))
-@click.option('-n', '--name', type=click.STRING)
-@click.option('-nfp', '--no-flicker-patch', is_flag=True)
-@click.option('-p', '--patch', multiple=True, type=click.Path(exists=True))
-def build(wf, name, no_flicker_patch, patch):
+def is_url(path):
+    try:
+        res = urlparse(path)
+        return all([res.scheme, res.netloc, res.path])
+    except AttributeError:
+        return False
 
-    wine_src_dir = extract(wf, os.path.dirname(wf))
+
+@click.command()
+@click.argument('path_or_url', type=click.STRING)
+@click.option('-n', '--name', type=click.STRING,
+              help='Name of the engine which will appear in wineskin menu.')
+@click.option('-nfp', '--no-flicker-patch', is_flag=True,
+              help='Build wine with no-flickering patch.')
+@click.option('-p', '--patch', multiple=True, type=click.Path(exists=True),
+              help='/full/path/to/git/patch to be applied.')
+def build(path_or_url, name, no_flicker_patch, patch):
+
+    if is_url(path_or_url):
+        path_or_url = download(path_or_url, config.DOWNLOAD_TO)
+    wine_src_dir = extract(path_or_url, os.path.dirname(path_or_url))
 
     default_name = f'WS10{os.path.basename(wine_src_dir)}'
 
@@ -33,7 +48,7 @@ def build(wf, name, no_flicker_patch, patch):
                                 'no-flickering-wine-2.14.diff')
             apply_patch(wine_src_dir, path)
 
-        config_writer(wine_src_dir, name or os.path.basename())
+        config_writer(wine_src_dir, name or default_name)
         subprocess.run([
             config.WINESKIN_ENGINE_BUILD_SCRIPT
         ], check=True)
@@ -45,6 +60,9 @@ def build(wf, name, no_flicker_patch, patch):
 
 
 def config_writer(wine_src_dir, engine_name):
+    """
+    Writes a config.txt file for wineskin engine builder
+    """
     config_path = os.path.join(config.WINESKIN_ENGINE_BUILDER_DIR, 'config.txt')
     with open(config_path, 'w+') as f:
         f.writelines([

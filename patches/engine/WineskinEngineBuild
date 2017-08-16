@@ -234,6 +234,16 @@ then
         echo "ERROR!!! No usable SDKs found on your system... this may not work right!  Please Install Apple Xcode to get SDKs"
         echo "";echo ""
     fi
+    #test for 10.11 SDKs
+    elif [ -d "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk" ]
+    then
+        export MINMACOSXVERSIONTOBUILDFOR="10.11"
+        export OSXSDK="/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk"
+    else
+        echo "";echo ""
+        echo "ERROR!!! No usable SDKs found on your system... this may not work right!  Please Install Apple Xcode to get SDKs"
+        echo "";echo ""
+    fi
     echo "SDK selected is $OSXSDK, lets hope it works..."
 fi
 export SDKROOT="$OSXSDK"

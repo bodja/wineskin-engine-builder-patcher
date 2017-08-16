@@ -87,6 +87,17 @@ def move_libs_to_engine_builder(*migration_instances):
         migration.migrate()
 
 
+def copy_engine_builder_updated_script():
+    src_file = os.path.join(
+        config.ROOT_DIR, 'patches', 'engine', 'WineskinEngineBuild'
+    )
+    dst_file = os.path.join(config.PREFIX, 'WineskinEngineBuild')
+    copyfile(src_file, dst_file)
+    # make executable
+    st = os.stat(dst_file)
+    os.chmod(dst_file, st.st_mode | stat.S_IEXEC)
+
+
 def apply():
     with cleanup(config.PREFIX, config.TMP_DIR):
         install_libs(
@@ -106,14 +117,7 @@ def apply():
             Openssl,
             Pulseaudio,
         )
-        src_file = os.path.join(
-            config.ROOT_DIR, 'patches', 'engine', 'WineskinEngineBuild'
-        )
-        dst_file = os.path.join(config.PREFIX, 'WineskinEngineBuild')
-        copyfile(src_file, dst_file)
-        st = os.stat(dst_file)
-        os.chmod(dst_file, st.st_mode | stat.S_IEXEC)
-
+        copy_engine_builder_updated_script()
         move_libs_to_engine_builder(*files_migrations)
 
 

@@ -1,9 +1,15 @@
+# requires
+
 python3
 
+MacOSX10.12.sdk
+
 brew install autoconf
+
 brew install autoreconf
 
-MacOSX10.11.sdk
-
+# patch wineskin engine builder
 python -m patch
-python -m build ./wine-2.14.tar
+
+# build wineskin engine from console
+python -m build --help
